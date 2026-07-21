@@ -1,0 +1,3 @@
+[submodule "firmware/third_party/esp32-2432S028R"]
+	path = firmware/third_party/esp32-2432S028R
+	url = https://github.com/ThomaMart/esp32-2432S028R.git
