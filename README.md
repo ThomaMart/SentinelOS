@@ -242,12 +242,6 @@ Its purpose is to demonstrate skills relevant to professional embedded software 
 
 # License
 
-Personal project for learning and portfolio purposes.
+Personal project.
 
 ---
-
-<div align="center">
-
-Projet personnel
-
-</div>
