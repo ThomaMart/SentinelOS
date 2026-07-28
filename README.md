@@ -23,7 +23,7 @@ The project focuses on designing a modular, maintainable and security-oriented f
 
 Rather than being a demonstration application, SentinelOS is developed as a production-oriented firmware platform showcasing embedded software architecture and cybersecurity concepts.
 
-<img width="1086" height="1448" alt="sentinelOS" src="https://github.com/user-attachments/assets/50dcc798-ea23-4cd0-aa69-0f8bdd8bf5f0" />
+<img width="1086" height="1448" alt="4905f1a1-8d8a-485b-a763-fe27f8cb7d88" src="https://github.com/user-attachments/assets/98cb15f1-4356-42f7-a172-073d49881c83" />
 
 ---
 
