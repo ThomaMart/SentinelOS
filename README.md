@@ -6,7 +6,6 @@
 
 Embedded Software • FreeRTOS • Secure OTA • Embedded Security
 
-[![CI](https://github.com/ThomaMart/SentinelOS/actions/workflows/ci.yml/badge.svg)](https://github.com/ThomaMart/SentinelOS/actions)
 [![Platform](https://img.shields.io/badge/Platform-ESP32-E7352C?logo=espressif&logoColor=white)](https://www.espressif.com/)
 [![Framework](https://img.shields.io/badge/Framework-ESP--IDF%20v6-blue)](https://github.com/espressif/esp-idf)
 [![RTOS](https://img.shields.io/badge/RTOS-FreeRTOS-00979D)](https://www.freertos.org/)
