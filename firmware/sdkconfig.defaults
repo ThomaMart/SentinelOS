@@ -1,0 +1,7 @@
+# Durable project defaults (committed). Full config lives in sdkconfig.
+#
+# Secure Boot V2 signing key: path is RELATIVE to this firmware/ directory and
+# resolved by ESP-IDF against the project dir. The key itself is a secret kept
+# in firmware/secrets/ (git-ignored) -- provision it there before building,
+# e.g.  cp <your-key>.pem firmware/secrets/secure_boot_v2_signing_key.pem
+CONFIG_SECURE_BOOT_SIGNING_KEY="secrets/secure_boot_v2_signing_key.pem"

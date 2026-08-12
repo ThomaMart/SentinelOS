@@ -1,1 +1,4 @@
 firmware/build/
+
+# Signing secrets — provisioned locally, NEVER committed
+firmware/secrets/
