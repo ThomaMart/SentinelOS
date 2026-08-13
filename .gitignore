@@ -1,4 +1,7 @@
 firmware/build/
 
+# Managed dependencies — regenerated from firmware/dependencies.lock, not tracked
+firmware/managed_components/
+
 # Signing secrets — provisioned locally, NEVER committed
 firmware/secrets/
