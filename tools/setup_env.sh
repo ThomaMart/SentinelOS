@@ -2,20 +2,25 @@
 #
 # setup_env.sh — Bootstrap the full build/flash environment for SentinelOS.
 #
-# After cloning the repo, run this once to get everything needed to flash the
-# board: ESP-IDF, the Xtensa toolchain, cmake/ninja, and the board submodule.
-# The script is idempotent — safe to re-run; it skips steps already done.
+# After cloning the repo, run this once on any PC to get everything needed to
+# build and flash the board: ESP-IDF, the Xtensa toolchain, cmake/ninja, the
+# board submodule, Wi-Fi credentials, and the signing key. Idempotent — safe to
+# re-run; it skips steps already done.
 #
 # Usage:
-#   tools/setup_env.sh              # set up the environment only
-#   tools/setup_env.sh --build      # ...then build the firmware
-#   tools/setup_env.sh --flash      # ...then build and flash the board
+#   tools/setup_env.sh                  # set up the environment
+#   tools/setup_env.sh --build          # ...then build the firmware
+#   tools/setup_env.sh --flash          # ...then build and flash the board
+#   tools/setup_env.sh --wifi           # (re)configure Wi-Fi credentials
+#   tools/setup_env.sh --gen-signing-key  # generate a fresh Secure Boot key
 #
 # Configurable via environment variables:
-#   IDF_BRANCH   ESP-IDF branch/tag to install   (default: release/v6.0)
-#   IDF_DIR      Where ESP-IDF is installed       (default: ~/esp/esp-idf-v6)
-#   IDF_TARGET   Chip target                      (default: esp32)
-#   PORT         Serial port for flashing         (default: /dev/ttyUSB0)
+#   IDF_BRANCH     ESP-IDF branch/tag to install   (default: release/v6.0)
+#   IDF_DIR        Where ESP-IDF is installed       (default: ~/esp/esp-idf-v6)
+#   IDF_TARGET     Chip target                      (default: esp32)
+#   PORT           Serial port for flashing         (default: /dev/ttyUSB0)
+#   WIFI_SSID      Wi-Fi SSID (non-interactive)     (prompts if unset)
+#   WIFI_PASSWORD  Wi-Fi password (non-interactive) (prompts if unset)
 #
 set -euo pipefail
 
@@ -44,12 +49,16 @@ die()  { echo "${C_RED}  ✗ $*${C_RESET}" >&2; exit 1; }
 # --- args --------------------------------------------------------------------
 DO_BUILD=0
 DO_FLASH=0
+DO_WIFI=0
+DO_GENKEY=0
 for arg in "$@"; do
     case "$arg" in
         --build) DO_BUILD=1 ;;
         --flash) DO_BUILD=1; DO_FLASH=1 ;;
+        --wifi) DO_WIFI=1 ;;
+        --gen-signing-key) DO_GENKEY=1 ;;
         -h|--help) grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
-        *) die "Unknown argument: $arg (use --build, --flash, or --help)" ;;
+        *) die "Unknown argument: $arg (use --build, --flash, --wifi, --gen-signing-key, or --help)" ;;
     esac
 done
 
@@ -116,35 +125,89 @@ case "${KEY_PATH:-}" in
     /*|"") : ;;                       # absolute or empty — leave as-is
     *) KEY_PATH="$FIRMWARE/$KEY_PATH" ;;
 esac
-if [ -z "${KEY_PATH:-}" ]; then
-    ok "Secure Boot signing not configured — nothing to check"
-elif [ -s "$KEY_PATH" ] && python3 - "$KEY_PATH" <<'PY' >/dev/null 2>&1
+key_is_valid() {
+    [ -s "$1" ] && python3 - "$1" <<'PY' >/dev/null 2>&1
 import sys
 from cryptography.hazmat.primitives.serialization import load_pem_private_key
 load_pem_private_key(open(sys.argv[1], "rb").read(), password=None)
 PY
-then
+}
+if [ -z "${KEY_PATH:-}" ]; then
+    ok "Secure Boot signing not configured — nothing to check"
+elif key_is_valid "$KEY_PATH"; then
     ok "Signing key valid: $KEY_PATH"
+elif [ "$DO_GENKEY" -eq 1 ]; then
+    warn "Generating a NEW RSA-3072 Secure Boot signing key at $KEY_PATH"
+    warn "Only use this on a board NOT yet secure-boot-provisioned (its digest"
+    warn "will be burned on first boot). A board already provisioned with a"
+    warn "different key will refuse to boot images signed by this one."
+    mkdir -p "$(dirname "$KEY_PATH")"
+    ( cd "$FIRMWARE" && idf.py secure-generate-signing-key --scheme rsa3072 "$KEY_PATH" )
+    key_is_valid "$KEY_PATH" && ok "Generated $KEY_PATH" || die "key generation failed"
 else
-    warn "Signing key missing/empty/invalid: ${KEY_PATH:-<unset>}"
-    warn "This board has Secure Boot V2 burned into eFuses, so the build must"
-    warn "sign with the key that matches the eFuse digest. Put the correct"
-    warn ".pem there before building, or the build fails with a PEM error."
+    warn "Signing key missing/empty/invalid: $KEY_PATH"
+    warn "Provision it before building. Either:"
+    warn "  - copy the key that matches this board's burned eFuse digest, or"
+    warn "  - for a fresh board, re-run with --gen-signing-key to create one."
 fi
 
 # --- 6b. Wi-Fi credentials ---------------------------------------------------
-step "Checking Wi-Fi credentials"
+step "Configuring Wi-Fi credentials"
 WIFI_HDR="$FIRMWARE/secrets/wifi_credentials.h"
 WIFI_TMPL="$FIRMWARE/components/config/wifi_credentials.example.h"
-if [ -f "$WIFI_HDR" ]; then
+
+# Escape backslashes and double-quotes so odd passwords stay valid C strings.
+wifi_escape() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
+
+write_wifi_header() {
+    mkdir -p "$FIRMWARE/secrets"
+    {
+        echo "#ifndef WIFI_CREDENTIALS_H"
+        echo "#define WIFI_CREDENTIALS_H"
+        echo ""
+        echo "/* Local Wi-Fi credentials — generated by tools/setup_env.sh, git-ignored. */"
+        echo ""
+        echo "#define SENTINELOS_WIFI_SSID     \"$(wifi_escape "$1")\""
+        echo "#define SENTINELOS_WIFI_PASSWORD \"$(wifi_escape "$2")\""
+        echo ""
+        echo "#endif /* WIFI_CREDENTIALS_H */"
+    } > "$WIFI_HDR"
+    chmod 600 "$WIFI_HDR"
+}
+
+current_ssid() {
+    sed -nE 's/.*SENTINELOS_WIFI_SSID[[:space:]]+"([^"]*)".*/\1/p' "$WIFI_HDR" 2>/dev/null | head -1
+}
+
+if [ -n "${WIFI_SSID:-}" ] && [ -n "${WIFI_PASSWORD:-}" ]; then
+    # Non-interactive: values supplied via environment.
+    write_wifi_header "$WIFI_SSID" "$WIFI_PASSWORD"
+    ok "Wrote $WIFI_HDR from WIFI_SSID/WIFI_PASSWORD"
+elif [ -f "$WIFI_HDR" ] && [ "$DO_WIFI" -eq 0 ]; then
+    ok "Wi-Fi credentials present: $WIFI_HDR (use --wifi to reconfigure)"
+elif [ -t 0 ]; then
+    # Interactive prompt (password input is hidden).
+    cur="$(current_ssid)"
+    printf "    Wi-Fi SSID%s: " "${cur:+ [$cur]}"
+    read -r in_ssid
+    in_ssid="${in_ssid:-$cur}"
+    printf "    Wi-Fi password: "
+    read -rs in_pass; echo
+    if [ -z "$in_ssid" ]; then
+        warn "No SSID entered — leaving Wi-Fi credentials unchanged."
+    else
+        write_wifi_header "$in_ssid" "$in_pass"
+        ok "Wrote $WIFI_HDR"
+    fi
+elif [ -f "$WIFI_HDR" ]; then
     ok "Wi-Fi credentials present: $WIFI_HDR"
 elif [ -f "$WIFI_TMPL" ]; then
     mkdir -p "$FIRMWARE/secrets"
     cp "$WIFI_TMPL" "$WIFI_HDR"
-    warn "Created $WIFI_HDR from template — EDIT it with your SSID/password"
-    warn "(git-ignored; the build uses placeholder values until you do)."
+    warn "No credentials given and not a terminal — wrote placeholder $WIFI_HDR."
+    warn "Set WIFI_SSID/WIFI_PASSWORD or run with --wifi, then rebuild."
 else
-    warn "No wifi_credentials.h and no template found — Wi-Fi will not build."
+    warn "No wifi_credentials.h, no template, and no credentials given — Wi-Fi will not build."
 fi
 
 # --- 7. optional build / flash ----------------------------------------------
