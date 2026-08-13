@@ -1,0 +1,13 @@
+menu "SentinelOS"
+
+config SENTINELOS_UPDATE_MANIFEST_URL
+    string "OTA update manifest URL"
+    default "http://192.168.1.52:8080/manifest.json"
+    help
+        URL of the JSON manifest the device polls to discover OTA updates.
+        Override it per environment without editing source:
+          - interactively:  idf.py menuconfig  -> SentinelOS
+          - or in sdkconfig.defaults:
+              CONFIG_SENTINELOS_UPDATE_MANIFEST_URL="http://<server>:8080/manifest.json"
+
+endmenu

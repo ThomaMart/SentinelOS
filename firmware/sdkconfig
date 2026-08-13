@@ -659,6 +659,12 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# SentinelOS
+#
+CONFIG_SENTINELOS_UPDATE_MANIFEST_URL="http://192.168.1.52:8080/manifest.json"
+# end of SentinelOS
+
+#
 # XPT2046
 #
 # default:
