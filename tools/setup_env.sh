@@ -132,6 +132,21 @@ else
     warn ".pem there before building, or the build fails with a PEM error."
 fi
 
+# --- 6b. Wi-Fi credentials ---------------------------------------------------
+step "Checking Wi-Fi credentials"
+WIFI_HDR="$FIRMWARE/secrets/wifi_credentials.h"
+WIFI_TMPL="$FIRMWARE/components/config/wifi_credentials.example.h"
+if [ -f "$WIFI_HDR" ]; then
+    ok "Wi-Fi credentials present: $WIFI_HDR"
+elif [ -f "$WIFI_TMPL" ]; then
+    mkdir -p "$FIRMWARE/secrets"
+    cp "$WIFI_TMPL" "$WIFI_HDR"
+    warn "Created $WIFI_HDR from template — EDIT it with your SSID/password"
+    warn "(git-ignored; the build uses placeholder values until you do)."
+else
+    warn "No wifi_credentials.h and no template found — Wi-Fi will not build."
+fi
+
 # --- 7. optional build / flash ----------------------------------------------
 if [ "$DO_BUILD" -eq 1 ]; then
     step "Building firmware"
